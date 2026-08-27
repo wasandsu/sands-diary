@@ -75,6 +75,26 @@ html, body {
   border: 2px solid var(--brown);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0;
+}
+.sd-avatar img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sd-avatar .sd-avatar-edit {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--stamp);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  border: 2px solid var(--paper);
 }
 .sd-name-row { flex: 1; min-width: 0; }
 .sd-name {
@@ -288,10 +308,10 @@ html, body {
 <body>
 <div class="sd-app" id="sdApp">
   <div class="sd-header">
-    <div class="sd-eyebrow">🐾 반려견 건강 수첩</div>
+    <div class="sd-eyebrow">🐾 샌즈 건강 수첩</div>
     <div class="sd-titlebar">
-      <div class="sd-avatar">
-        <svg width="34" height="34" viewBox="0 0 64 64" fill="none">
+      <button class="sd-avatar" id="sdAvatarBtn" type="button" aria-label="프로필 사진 변경" title="눌러서 사진 바꾸기">
+        <svg id="sdAvatarSvg" width="34" height="34" viewBox="0 0 64 64" fill="none">
           <ellipse cx="32" cy="38" rx="18" ry="14" fill="#6B4226"/>
           <ellipse cx="22" cy="24" rx="7" ry="12" fill="#6B4226" transform="rotate(-20 22 24)"/>
           <ellipse cx="42" cy="24" rx="7" ry="12" fill="#6B4226" transform="rotate(20 42 24)"/>
@@ -300,7 +320,10 @@ html, body {
           <circle cx="37" cy="33" r="1.6" fill="#2B241C"/>
           <ellipse cx="32" cy="38" rx="2.4" ry="1.8" fill="#2B241C"/>
         </svg>
-      </div>
+        <img id="sdAvatarImg" style="display:none;" alt="샌즈 사진">
+        <span class="sd-avatar-edit">✎</span>
+      </button>
+      <input type="file" id="sdAvatarInput" accept="image/*" style="display:none;">
       <div class="sd-name-row">
         <div class="sd-name" id="sdName">샌즈</div>
         <div class="sd-breed" id="sdBreed">비글 · 나이 -</div>
@@ -335,6 +358,7 @@ html, body {
       </div>
       <div class="sd-field"><label>건강 상태 메모</label><textarea id="fNote" placeholder="알레르기, 지병, 특이사항 등을 적어주세요"></textarea></div>
       <div class="sd-formbtns">
+        <button class="sd-btn sd-btn-ghost" id="sdRemovePhoto" style="margin-right:auto;">사진 삭제</button>
         <button class="sd-btn sd-btn-ghost" id="sdCancelEdit">취소</button>
         <button class="sd-btn sd-btn-primary" id="sdSaveProfile">저장</button>
       </div>
@@ -370,6 +394,7 @@ html, body {
 (function() {
   const STORAGE_PROFILE = 'sands_profile';
   const STORAGE_RECORDS = 'sands_records';
+  const STORAGE_PHOTO = 'sands_photo';
 
   const TYPE_META = {
     walk:   { label: '산책',   icon: '🐾', color: '#5C7A4E' },
@@ -413,6 +438,48 @@ html, body {
     renderProfile();
     renderTabs();
     renderTimeline();
+    renderAvatar();
+  }
+
+  function renderAvatar() {
+    let photo = null;
+    try { photo = localStorage.getItem(STORAGE_PHOTO); } catch (e) { /* ignore */ }
+    if (photo) {
+      $('sdAvatarImg').src = photo;
+      $('sdAvatarImg').style.display = 'block';
+      $('sdAvatarSvg').style.display = 'none';
+    } else {
+      $('sdAvatarImg').style.display = 'none';
+      $('sdAvatarSvg').style.display = 'block';
+    }
+  }
+
+  function resizeImageToDataUrl(file, maxSize) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('파일을 읽지 못했어요'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('이미지를 열지 못했어요'));
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > height && width > maxSize) {
+            height = Math.round(height * (maxSize / width));
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = Math.round(width * (maxSize / height));
+            height = maxSize;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   function saveProfile() {
@@ -526,6 +593,33 @@ html, body {
     saveProfile();
     renderProfile();
     $('sdEditForm').classList.remove('open');
+  });
+
+  // ---- Avatar photo ----
+  $('sdAvatarBtn').addEventListener('click', () => {
+    $('sdAvatarInput').click();
+  });
+  $('sdAvatarInput').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 400);
+      try {
+        localStorage.setItem(STORAGE_PHOTO, dataUrl);
+        renderAvatar();
+      } catch (err) {
+        console.error('사진 저장 실패', err);
+        alert('사진 저장에 실패했어요. 용량이 너무 클 수 있어요.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('사진을 불러오지 못했어요.');
+    }
+  });
+  $('sdRemovePhoto').addEventListener('click', () => {
+    localStorage.removeItem(STORAGE_PHOTO);
+    renderAvatar();
   });
 
   // Add record type toggle for weight field
