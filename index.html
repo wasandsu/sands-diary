@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>샌즈 건강 수첩</title>
+<meta name="theme-color" content="#6B4226">
+<meta name="description" content="비글 샌즈의 몸무게, 산책, 구충제, 병원 기록을 관리하는 개인용 앱">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="샌즈수첩">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: #EFE3C8;
+  font-family: 'Noto Sans KR', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sd-app {
+  --paper: #FBF3E4;
+  --paper-2: #F3E7CE;
+  --ink: #2B241C;
+  --ink-soft: #6B5D48;
+  --tan: #C99A5B;
+  --brown: #6B4226;
+  --stamp: #B23A2E;
+  --stamp-soft: #E7C9BE;
+  --line: #D8C7A6;
+  --green: #5C7A4E;
+  color: var(--ink);
+  background: var(--paper);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(107,66,38,0.06) 1px, transparent 0);
+  background-size: 14px 14px;
+  border-radius: 0;
+  padding: 0;
+  max-width: 560px;
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow: hidden;
+}
+
+/* ---------- Header / ID card ---------- */
+.sd-header {
+  position: relative;
+  padding: calc(18px + env(safe-area-inset-top)) 22px 18px;
+  background: linear-gradient(180deg, var(--paper-2), var(--paper));
+  border-bottom: 2px dashed var(--line);
+}
+.sd-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.sd-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sd-avatar {
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  background: var(--tan);
+  border: 2px solid var(--brown);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sd-name-row { flex: 1; min-width: 0; }
+.sd-name {
+  font-family: 'Gowun Batang', serif;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.sd-breed {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.sd-editbtn {
+  border: 1px solid var(--brown);
+  background: transparent;
+  color: var(--brown);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sd-editbtn:hover { background: var(--brown); color: var(--paper); }
+
+.sd-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 16px;
+}
+.sd-stat {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: center;
+}
+.sd-stat-label { font-size: 10.5px; color: var(--ink-soft); font-weight: 500; }
+.sd-stat-value { font-family: 'Gowun Batang', serif; font-size: 18px; margin-top: 2px; }
+
+.sd-note {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  min-height: 18px;
+}
+
+.sd-installbar {
+  display: none;
+  margin-top: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--stamp-soft);
+  border: 1px solid var(--stamp);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.sd-installbar.show { display: flex; }
+.sd-installbar button {
+  background: var(--stamp);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ---------- Edit form ---------- */
+.sd-editform {
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: none;
+}
+.sd-editform.open { display: block; }
+.sd-editform .sd-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.sd-field label { font-size: 11px; color: var(--ink-soft); display: block; margin-bottom: 4px; font-weight: 600; }
+.sd-field input, .sd-field textarea, .sd-field select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+.sd-field textarea { resize: vertical; min-height: 44px; }
+.sd-formbtns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+/* ---------- Buttons ---------- */
+.sd-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.sd-btn-primary { background: var(--stamp); color: #fff; }
+.sd-btn-primary:hover { background: #963026; }
+.sd-btn-ghost { background: transparent; border-color: var(--line); color: var(--ink-soft); }
+.sd-btn-ghost:hover { background: var(--paper-2); }
+
+/* ---------- Tabs ---------- */
+.sd-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 14px 16px 0;
+  overflow-x: auto;
+}
+.sd-tab {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 999px 999px 0 0;
+  background: var(--paper-2);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  white-space: nowrap;
+}
+.sd-tab.active {
+  background: var(--paper);
+  color: var(--ink);
+  position: relative;
+  top: 1px;
+}
+
+/* ---------- Add record ---------- */
+.sd-addbar {
+  margin: 14px 16px 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.sd-addbar-row { display: grid; grid-template-columns: 100px 1fr 110px; gap: 8px; }
+.sd-addbar-row2 { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+
+/* ---------- Timeline ---------- */
+.sd-timeline {
+  padding: 16px;
+  min-height: 120px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.sd-empty {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  padding: 30px 10px;
+  line-height: 1.6;
+}
+.sd-entry {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  animation: sd-in 0.25s ease;
+}
+@keyframes sd-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.sd-entry:last-child { border-bottom: none; }
+.sd-stampicon {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+  transform: rotate(-6deg);
+}
+.sd-entry-body { flex: 1; min-width: 0; }
+.sd-entry-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sd-entry-type { font-size: 13px; font-weight: 700; }
+.sd-entry-date { font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; }
+.sd-entry-memo { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; line-height: 1.45; word-break: break-word; }
+.sd-entry-del {
+  background: none; border: none; color: var(--ink-soft);
+  cursor: pointer; font-size: 11px; margin-top: 4px; padding: 0;
+  text-decoration: underline;
+}
+.sd-entry-del:hover { color: var(--stamp); }
+
+.sd-footer {
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  padding: 8px 0 calc(14px + env(safe-area-inset-bottom));
+  opacity: 0.7;
+}
+
+@media (max-width: 420px) {
+  .sd-addbar-row { grid-template-columns: 1fr; }
+  .sd-stats { grid-template-columns: repeat(3, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="sd-app" id="sdApp">
+  <div class="sd-header">
+    <div class="sd-eyebrow">🐾 반려견 건강 수첩</div>
+    <div class="sd-titlebar">
+      <div class="sd-avatar">
+        <svg width="34" height="34" viewBox="0 0 64 64" fill="none">
+          <ellipse cx="32" cy="38" rx="18" ry="14" fill="#6B4226"/>
+          <ellipse cx="22" cy="24" rx="7" ry="12" fill="#6B4226" transform="rotate(-20 22 24)"/>
+          <ellipse cx="42" cy="24" rx="7" ry="12" fill="#6B4226" transform="rotate(20 42 24)"/>
+          <circle cx="32" cy="34" r="12" fill="#F3E7CE"/>
+          <circle cx="27" cy="33" r="1.6" fill="#2B241C"/>
+          <circle cx="37" cy="33" r="1.6" fill="#2B241C"/>
+          <ellipse cx="32" cy="38" rx="2.4" ry="1.8" fill="#2B241C"/>
+        </svg>
+      </div>
+      <div class="sd-name-row">
+        <div class="sd-name" id="sdName">샌즈</div>
+        <div class="sd-breed" id="sdBreed">비글 · 나이 -</div>
+      </div>
+      <button class="sd-editbtn" id="sdEditToggle">프로필 수정</button>
+    </div>
+
+    <div class="sd-stats">
+      <div class="sd-stat"><div class="sd-stat-label">몸무게</div><div class="sd-stat-value" id="sdWeight">- kg</div></div>
+      <div class="sd-stat"><div class="sd-stat-label">몸 길이</div><div class="sd-stat-value" id="sdLength">- cm</div></div>
+      <div class="sd-stat"><div class="sd-stat-label">최근 산책</div><div class="sd-stat-value" id="sdLastWalk">-</div></div>
+    </div>
+    <div class="sd-note" id="sdNote">건강 상태 메모가 아직 없어요.</div>
+
+    <div class="sd-installbar" id="sdInstallBar">
+      <span>홈 화면에 추가하면 앱처럼 쓸 수 있어요</span>
+      <button id="sdInstallBtn">추가</button>
+    </div>
+
+    <div class="sd-editform" id="sdEditForm">
+      <div class="sd-row">
+        <div class="sd-field"><label>이름</label><input type="text" id="fName" value="샌즈"></div>
+        <div class="sd-field"><label>견종</label><input type="text" id="fBreed" value="비글"></div>
+      </div>
+      <div class="sd-row">
+        <div class="sd-field"><label>생년월일</label><input type="date" id="fBirth"></div>
+        <div class="sd-field"><label>몸 길이 (cm)</label><input type="number" step="0.1" id="fLength" placeholder="예: 45"></div>
+      </div>
+      <div class="sd-row">
+        <div class="sd-field"><label>현재 몸무게 (kg)</label><input type="number" step="0.1" id="fWeight" placeholder="예: 10.5"></div>
+        <div class="sd-field"><label>&nbsp;</label></div>
+      </div>
+      <div class="sd-field"><label>건강 상태 메모</label><textarea id="fNote" placeholder="알레르기, 지병, 특이사항 등을 적어주세요"></textarea></div>
+      <div class="sd-formbtns">
+        <button class="sd-btn sd-btn-ghost" id="sdCancelEdit">취소</button>
+        <button class="sd-btn sd-btn-primary" id="sdSaveProfile">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sd-tabs" id="sdTabs"></div>
+
+  <div class="sd-addbar">
+    <div class="sd-addbar-row">
+      <select id="aType">
+        <option value="walk">🐾 산책</option>
+        <option value="deworm">💊 구충제</option>
+        <option value="vet">🏥 병원</option>
+        <option value="weight">⚖️ 몸무게</option>
+      </select>
+      <input type="text" id="aMemo" placeholder="메모 (예: 동네 공원 30분, 심장사상충 약)">
+      <input type="date" id="aDate">
+    </div>
+    <div class="sd-addbar-row2">
+      <input type="number" step="0.1" id="aWeightVal" placeholder="몸무게(kg) — '몸무게' 유형일 때만" style="display:none;">
+      <button class="sd-btn sd-btn-primary" id="sdAddBtn">기록 추가</button>
+    </div>
+  </div>
+
+  <div class="sd-timeline" id="sdTimeline">
+    <div class="sd-empty">불러오는 중...</div>
+  </div>
+  <div class="sd-footer">샌즈의 건강 수첩 · 이 기기에만 저장되는 개인 기록이에요</div>
+</div>
+
+<script>
+(function() {
+  const STORAGE_PROFILE = 'sands_profile';
+  const STORAGE_RECORDS = 'sands_records';
+
+  const TYPE_META = {
+    walk:   { label: '산책',   icon: '🐾', color: '#5C7A4E' },
+    deworm: { label: '구충제', icon: '💊', color: '#B58C1E' },
+    vet:    { label: '병원',   icon: '🏥', color: '#B23A2E' },
+    weight: { label: '몸무게', icon: '⚖️', color: '#6B4226' },
+  };
+
+  let profile = { name: '샌즈', breed: '비글', birth: '', weight: '', length: '', note: '' };
+  let records = [];
+  let activeTab = 'all';
+
+  const $ = (id) => document.getElementById(id);
+
+  function todayStr() {
+    const d = new Date();
+    return d.toISOString().slice(0, 10);
+  }
+
+  function ageString(birth) {
+    if (!birth) return '나이 -';
+    const b = new Date(birth);
+    const now = new Date();
+    let years = now.getFullYear() - b.getFullYear();
+    let months = now.getMonth() - b.getMonth();
+    if (now.getDate() < b.getDate()) months -= 1;
+    if (months < 0) { years -= 1; months += 12; }
+    if (years < 0) return '나이 -';
+    return years > 0 ? `${years}살 ${months}개월` : `${months}개월`;
+  }
+
+  function loadData() {
+    try {
+      const p = localStorage.getItem(STORAGE_PROFILE);
+      if (p) profile = { ...profile, ...JSON.parse(p) };
+    } catch (e) { console.error('프로필 불러오기 실패', e); }
+    try {
+      const r = localStorage.getItem(STORAGE_RECORDS);
+      if (r) records = JSON.parse(r);
+    } catch (e) { console.error('기록 불러오기 실패', e); records = []; }
+    renderProfile();
+    renderTabs();
+    renderTimeline();
+  }
+
+  function saveProfile() {
+    try {
+      localStorage.setItem(STORAGE_PROFILE, JSON.stringify(profile));
+    } catch (e) { console.error('프로필 저장 실패', e); alert('저장에 실패했어요. 저장 공간이 부족할 수 있어요.'); }
+  }
+
+  function saveRecords() {
+    try {
+      localStorage.setItem(STORAGE_RECORDS, JSON.stringify(records));
+    } catch (e) { console.error('기록 저장 실패', e); alert('저장에 실패했어요. 저장 공간이 부족할 수 있어요.'); }
+  }
+
+  function renderProfile() {
+    $('sdName').textContent = profile.name || '샌즈';
+    $('sdBreed').textContent = `${profile.breed || '비글'} · ${ageString(profile.birth)}`;
+    $('sdWeight').textContent = profile.weight ? `${profile.weight} kg` : '- kg';
+    $('sdLength').textContent = profile.length ? `${profile.length} cm` : '- cm';
+    $('sdNote').textContent = profile.note ? profile.note : '건강 상태 메모가 아직 없어요.';
+
+    const lastWalk = records
+      .filter(r => r.type === 'walk')
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    $('sdLastWalk').textContent = lastWalk ? lastWalk.date.slice(5) : '-';
+
+    $('fName').value = profile.name || '';
+    $('fBreed').value = profile.breed || '';
+    $('fBirth').value = profile.birth || '';
+    $('fWeight').value = profile.weight || '';
+    $('fLength').value = profile.length || '';
+    $('fNote').value = profile.note || '';
+  }
+
+  function renderTabs() {
+    const tabs = [{ key: 'all', label: '전체' }, ...Object.keys(TYPE_META).map(k => ({ key: k, label: TYPE_META[k].icon + ' ' + TYPE_META[k].label }))];
+    $('sdTabs').innerHTML = tabs.map(t =>
+      `<div class="sd-tab ${t.key === activeTab ? 'active' : ''}" data-tab="${t.key}">${t.label}</div>`
+    ).join('');
+    $('sdTabs').querySelectorAll('.sd-tab').forEach(el => {
+      el.addEventListener('click', () => {
+        activeTab = el.dataset.tab;
+        renderTabs();
+        renderTimeline();
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function renderTimeline() {
+    const list = records
+      .filter(r => activeTab === 'all' || r.type === activeTab)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+
+    if (list.length === 0) {
+      $('sdTimeline').innerHTML = `<div class="sd-empty">아직 기록이 없어요.<br>위에서 첫 기록을 추가해보세요 🐾</div>`;
+      return;
+    }
+
+    $('sdTimeline').innerHTML = list.map(r => {
+      const meta = TYPE_META[r.type] || TYPE_META.walk;
+      const weightPart = r.type === 'weight' && r.weight ? `${r.weight} kg` : '';
+      const memo = [weightPart, r.memo].filter(Boolean).join(' · ');
+      return `
+        <div class="sd-entry">
+          <div class="sd-stampicon" style="color:${meta.color}">${meta.icon}</div>
+          <div class="sd-entry-body">
+            <div class="sd-entry-top">
+              <div class="sd-entry-type" style="color:${meta.color}">${meta.label}</div>
+              <div class="sd-entry-date">${r.date}</div>
+            </div>
+            ${memo ? `<div class="sd-entry-memo">${escapeHtml(memo)}</div>` : ''}
+            <button class="sd-entry-del" data-id="${r.id}">삭제</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    $('sdTimeline').querySelectorAll('.sd-entry-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.id);
+        records = records.filter(r => r.id !== id);
+        saveRecords();
+        renderProfile();
+        renderTimeline();
+      });
+    });
+  }
+
+  // Edit profile toggle
+  $('sdEditToggle').addEventListener('click', () => {
+    $('sdEditForm').classList.toggle('open');
+  });
+  $('sdCancelEdit').addEventListener('click', () => {
+    $('sdEditForm').classList.remove('open');
+    renderProfile();
+  });
+  $('sdSaveProfile').addEventListener('click', () => {
+    profile = {
+      name: $('fName').value.trim() || '샌즈',
+      breed: $('fBreed').value.trim() || '비글',
+      birth: $('fBirth').value,
+      weight: $('fWeight').value,
+      length: $('fLength').value,
+      note: $('fNote').value.trim(),
+    };
+    saveProfile();
+    renderProfile();
+    $('sdEditForm').classList.remove('open');
+  });
+
+  // Add record type toggle for weight field
+  $('aType').addEventListener('change', () => {
+    $('aWeightVal').style.display = $('aType').value === 'weight' ? 'block' : 'none';
+  });
+
+  $('sdAddBtn').addEventListener('click', () => {
+    const type = $('aType').value;
+    const date = $('aDate').value || todayStr();
+    const memo = $('aMemo').value.trim();
+    const weightVal = $('aWeightVal').value;
+
+    if (type === 'weight' && !weightVal && !memo) {
+      alert('몸무게 값을 입력해주세요.');
+      return;
+    }
+
+    const entry = { id: Date.now(), type, date, memo };
+    if (type === 'weight' && weightVal) {
+      entry.weight = weightVal;
+      profile.weight = weightVal;
+      saveProfile();
+    }
+    records.push(entry);
+    saveRecords();
+
+    $('aMemo').value = '';
+    $('aWeightVal').value = '';
+    renderProfile();
+    renderTimeline();
+  });
+
+  $('aDate').value = todayStr();
+  loadData();
+
+  // ---- PWA install prompt ----
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    $('sdInstallBar').classList.add('show');
+  });
+  $('sdInstallBtn').addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    $('sdInstallBar').classList.remove('show');
+  });
+  window.addEventListener('appinstalled', () => {
+    $('sdInstallBar').classList.remove('show');
+  });
+
+  // ---- Service worker registration ----
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch((e) => console.error('SW 등록 실패', e));
+    });
+  }
+})();
+</script>
+</body>
+</html>
