@@ -479,6 +479,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
         <option value="deworm">💊 구충제</option>
         <option value="vet">🏥 병원</option>
         <option value="weight">⚖️ 몸무게</option>
+        <option value="poop">💩 배변</option>
       </select>
       <input type="text" id="aMemo" placeholder="메모 (예: 동네 공원 30분, 심장사상충 약)">
       <input type="date" id="aDate">
@@ -487,6 +488,14 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       <label class="sd-btn" id="sdPhotoLbl" for="aPhoto">📷 사진</label>
       <input type="file" id="aPhoto" accept="image/*" hidden>
       <input type="number" step="0.1" id="aWeightVal" placeholder="몸무게(kg) — '몸무게' 유형일 때만" style="display:none;">
+      <select id="aStatus" style="display:none;">
+        <option value="">배변 상태 선택</option>
+        <option value="정상">정상</option>
+        <option value="무른 변">무른 변</option>
+        <option value="설사">설사</option>
+        <option value="변비">변비</option>
+        <option value="혈변·점액">혈변·점액</option>
+      </select>
       <button class="sd-btn sd-btn-primary" id="sdAddBtn">기록 추가</button>
     </div>
   </div>
@@ -519,6 +528,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     deworm: { label: '구충제', icon: '💊', color: '#B58C1E' },
     vet:    { label: '병원',   icon: '🏥', color: '#B23A2E' },
     weight: { label: '몸무게', icon: '⚖️', color: '#6B4226' },
+    poop:   { label: '배변',   icon: '💩', color: '#8A6A3C' },
   };
 
   let profile = { name: '샌즈', breed: '비글', birth: '', weight: '', length: '', note: '' };
@@ -583,7 +593,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       fetch(`${REST}/profile?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=data`, {
         headers: sbHeaders(),
       }),
-      fetch(`${REST}/records?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=id,type,date,memo,weight,photo&order=date.desc`, {
+      fetch(`${REST}/records?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=id,type,date,memo,weight,photo,status&order=date.desc`, {
         headers: sbHeaders(),
       }),
     ]);
@@ -601,6 +611,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     const out = { id: Number(r.id), type: r.type, date: r.date, memo: r.memo || '' };
     if (r.weight !== undefined && r.weight !== null && r.weight !== '') out.weight = String(r.weight);
     if (r.photo) out.photo = r.photo;
+    if (r.status) out.status = r.status;
     return out;
   }
 
@@ -622,6 +633,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       memo: entry.memo || '',
       weight: entry.weight != null ? String(entry.weight) : '',
       photo: entry.photo || null,
+      status: entry.status || null,
     };
     const res = await fetch(`${REST}/records?on_conflict=id`, {
       method: 'POST',
@@ -898,7 +910,8 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('sdTimeline').innerHTML = list.map(r => {
       const meta = TYPE_META[r.type] || TYPE_META.walk;
       const weightPart = r.type === 'weight' && r.weight ? `${r.weight} kg` : '';
-      const memo = [weightPart, r.memo].filter(Boolean).join(' · ');
+      const statusPart = r.type === 'poop' && r.status ? r.status : '';
+      const memo = [weightPart, statusPart, r.memo].filter(Boolean).join(' · ');
       return `
         <div class="sd-entry">
           <div class="sd-stampicon" style="color:${meta.color}">${meta.icon}</div>
@@ -1019,6 +1032,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
   // Add record type toggle for weight field
   $('aType').addEventListener('change', () => {
     $('aWeightVal').style.display = $('aType').value === 'weight' ? 'block' : 'none';
+    $('aStatus').style.display = $('aType').value === 'poop' ? 'block' : 'none';
   });
 
   $('sdAddBtn').addEventListener('click', async () => {
@@ -1049,6 +1063,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
 
     const entry = { id: Date.now(), type, date, memo };
     if (photoPath) entry.photo = photoPath;
+    if (type === 'poop' && $('aStatus').value) entry.status = $('aStatus').value;
     if (type === 'weight' && weightVal) {
       entry.weight = weightVal;
       profile.weight = weightVal;
@@ -1061,6 +1076,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('aMemo').value = '';
     $('aWeightVal').value = '';
     $('aPhoto').value = '';
+    $('aStatus').value = '';
     $('sdPhotoLbl').textContent = '📷 사진';
     renderProfile();
     renderTimeline();
