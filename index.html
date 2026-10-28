@@ -245,7 +245,7 @@ html, body {
   padding: 12px;
 }
 .sd-addbar-row { display: grid; grid-template-columns: 100px 1fr 110px; gap: 8px; }
-.sd-addbar-row2 { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+.sd-addbar-row2 { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; margin-top: 8px; }
 
 /* ---------- Timeline ---------- */
 .sd-timeline {
@@ -295,6 +295,8 @@ html, body {
 .sd-next.is-due { color: var(--stamp); }
 .sd-chart { margin: 14px 0 4px; }
 .sd-chart svg { width: 100%; height: auto; display: block; }
+label.sd-btn { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.sd-entry-photo { display: block; margin-top: 8px; max-width: 100%; max-height: 220px; border-radius: 10px; border: 1px solid #E4D6BC; }
 /* ---------- Sync status badge ---------- */
 .sd-sync {
   display: flex;
@@ -482,6 +484,8 @@ html, body {
       <input type="date" id="aDate">
     </div>
     <div class="sd-addbar-row2">
+      <label class="sd-btn" id="sdPhotoLbl" for="aPhoto">📷 사진</label>
+      <input type="file" id="aPhoto" accept="image/*" hidden>
       <input type="number" step="0.1" id="aWeightVal" placeholder="몸무게(kg) — '몸무게' 유형일 때만" style="display:none;">
       <button class="sd-btn sd-btn-primary" id="sdAddBtn">기록 추가</button>
     </div>
@@ -579,7 +583,7 @@ html, body {
       fetch(`${REST}/profile?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=data`, {
         headers: sbHeaders(),
       }),
-      fetch(`${REST}/records?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=id,type,date,memo,weight&order=date.desc`, {
+      fetch(`${REST}/records?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=id,type,date,memo,weight,photo&order=date.desc`, {
         headers: sbHeaders(),
       }),
     ]);
@@ -596,6 +600,7 @@ html, body {
   function normalizeRecord(r) {
     const out = { id: Number(r.id), type: r.type, date: r.date, memo: r.memo || '' };
     if (r.weight !== undefined && r.weight !== null && r.weight !== '') out.weight = String(r.weight);
+    if (r.photo) out.photo = r.photo;
     return out;
   }
 
@@ -616,6 +621,7 @@ html, body {
       date: entry.date,
       memo: entry.memo || '',
       weight: entry.weight != null ? String(entry.weight) : '',
+      photo: entry.photo || null,
     };
     const res = await fetch(`${REST}/records?on_conflict=id`, {
       method: 'POST',
@@ -631,6 +637,19 @@ html, body {
       headers: sbHeaders({ 'Prefer': 'return=minimal' }),
     });
     if (!res.ok) throw new Error('record delete ' + res.status);
+  }
+
+  // ---- 사진: Supabase Storage (공개 버킷, 추측 불가능한 파일명) ----
+  const BUCKET = 'sands-photos';
+  function photoUrl(path) { return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`; }
+  async function uploadPhoto(path, dataUrl) {
+    const blob = await (await fetch(dataUrl)).blob();
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': blob.type || 'image/jpeg' },
+      body: blob,
+    });
+    if (!res.ok) throw new Error('photo upload ' + res.status);
   }
 
   // 업로드 못 한 기록 id를 기억해 두었다가, 당겨올 때 지우지 않고 다시 올립니다.
@@ -707,8 +726,8 @@ html, body {
   }
 
   function renderAvatar() {
-    let photo = null;
-    try { photo = localStorage.getItem(STORAGE_PHOTO); } catch (e) { /* ignore */ }
+    let photo = (profile && profile.photoPath) ? photoUrl(profile.photoPath) : null;
+    if (!photo) { try { photo = localStorage.getItem(STORAGE_PHOTO); } catch (e) { /* ignore */ } }
     if (photo) {
       $('sdAvatarImg').src = photo;
       $('sdAvatarImg').style.display = 'block';
@@ -794,6 +813,7 @@ html, body {
     $('fNote').value = profile.note || '';
     $('fDeworm').value = profile.dewormDays || '';
     renderNext();
+    renderAvatar();
   }
 
   function renderTabs() {
@@ -888,6 +908,7 @@ html, body {
               <div class="sd-entry-date">${r.date}</div>
             </div>
             ${memo ? `<div class="sd-entry-memo">${escapeHtml(memo)}</div>` : ''}
+            ${r.photo ? `<a href="${photoUrl(r.photo)}" target="_blank" rel="noopener"><img class="sd-entry-photo" src="${photoUrl(r.photo)}" alt="기록 사진" loading="lazy"></a>` : ''}
             <button class="sd-entry-del" data-id="${r.id}">삭제</button>
           </div>
         </div>`;
@@ -944,6 +965,7 @@ html, body {
       length: $('fLength').value,
       note: $('fNote').value.trim(),
       dewormDays: $('fDeworm').value,
+      photoPath: profile.photoPath,
     };
     saveProfile();
     renderProfile();
@@ -963,6 +985,17 @@ html, body {
       const dataUrl = await resizeImageToDataUrl(file, 400);
       try {
         localStorage.setItem(STORAGE_PHOTO, dataUrl);
+        if (CLOUD_ENABLED && navigator.onLine) {
+          try {
+            const path = `profile/${crypto.randomUUID()}.jpg`;
+            await uploadPhoto(path, dataUrl);
+            profile.photoPath = path;
+            saveProfile();
+          } catch (err2) {
+            console.error('프로필 사진 동기화 실패', err2);
+            toast('사진이 이 기기에만 저장됐어요');
+          }
+        }
         renderAvatar();
       } catch (err) {
         console.error('사진 저장 실패', err);
@@ -975,7 +1008,12 @@ html, body {
   });
   $('sdRemovePhoto').addEventListener('click', () => {
     localStorage.removeItem(STORAGE_PHOTO);
+    if (profile.photoPath) { delete profile.photoPath; saveProfile(); }
     renderAvatar();
+  });
+
+  $('aPhoto').addEventListener('change', () => {
+    $('sdPhotoLbl').textContent = $('aPhoto').files.length ? '📷 ✓' : '📷 사진';
   });
 
   // Add record type toggle for weight field
@@ -983,7 +1021,7 @@ html, body {
     $('aWeightVal').style.display = $('aType').value === 'weight' ? 'block' : 'none';
   });
 
-  $('sdAddBtn').addEventListener('click', () => {
+  $('sdAddBtn').addEventListener('click', async () => {
     const type = $('aType').value;
     const date = $('aDate').value || todayStr();
     const memo = $('aMemo').value.trim();
@@ -994,7 +1032,23 @@ html, body {
       return;
     }
 
+    let photoPath = null;
+    const pf = $('aPhoto').files && $('aPhoto').files[0];
+    if (pf) {
+      try {
+        if (!CLOUD_ENABLED || !navigator.onLine) throw new Error('offline');
+        const dataUrl = await resizeImageToDataUrl(pf, 1000);
+        photoPath = `rec/${crypto.randomUUID()}.jpg`;
+        await uploadPhoto(photoPath, dataUrl);
+      } catch (err) {
+        console.error('사진 업로드 실패', err);
+        photoPath = null;
+        if (!confirm('사진을 올리지 못했어요. 사진 없이 기록할까요?')) return;
+      }
+    }
+
     const entry = { id: Date.now(), type, date, memo };
+    if (photoPath) entry.photo = photoPath;
     if (type === 'weight' && weightVal) {
       entry.weight = weightVal;
       profile.weight = weightVal;
@@ -1006,6 +1060,8 @@ html, body {
 
     $('aMemo').value = '';
     $('aWeightVal').value = '';
+    $('aPhoto').value = '';
+    $('sdPhotoLbl').textContent = '📷 사진';
     renderProfile();
     renderTimeline();
 
