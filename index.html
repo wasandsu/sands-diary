@@ -298,6 +298,14 @@ html, body {
 .sd-authorrow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
 .sd-authorrow select { flex: 1; }
 .sd-entry-author { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+.sd-certs { margin-top: 10px; font-size: 13px; }
+.sd-certs summary { cursor: pointer; font-weight: 700; color: var(--ink-soft); }
+.sd-cert-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0; }
+.sd-cert img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 10px; border: 1px solid #E4D6BC; display: block; }
+.sd-cert-label { font-size: 12px; margin-top: 4px; font-weight: 700; }
+.sd-cert-label span { font-weight: 400; color: var(--ink-soft); }
+.sd-cert-del { background: none; border: none; padding: 0; font-size: 11px; color: var(--ink-soft); text-decoration: underline; cursor: pointer; }
+.sd-cert-empty { grid-column: 1 / -1; color: var(--ink-soft); font-size: 12px; }
 .sd-editbanner { margin-top: 8px; font-size: 12.5px; font-weight: 700; color: #B58C1E; }
 .sd-editbanner a { margin-left: 6px; text-decoration: underline; cursor: pointer; }
 
@@ -439,7 +447,14 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     </div>
     <div class="sd-note" id="sdNote">건강 상태 메모가 아직 없어요.</div>
     <div class="sd-next" id="sdAdopt"></div>
+    <div class="sd-next" id="sdReg"></div>
     <div class="sd-next" id="sdNext"></div>
+    <details class="sd-certs">
+      <summary>📄 백신 접종 증명서 <span id="sdCertCount"></span></summary>
+      <div class="sd-cert-grid" id="sdCertGrid"></div>
+      <label class="sd-btn" for="sdCertInput">＋ 증명서 사진 추가</label>
+      <input type="file" id="sdCertInput" accept="image/*" hidden>
+    </details>
 
     <div class="sd-installbar" id="sdInstallBar">
       <span>홈 화면에 추가하면 앱처럼 쓸 수 있어요</span>
@@ -465,6 +480,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       <div class="sd-row">
         <div class="sd-field"><label>생년월 (추정)</label><input type="month" id="fBirth"></div>
         <div class="sd-field"><label>입양일</label><input type="date" id="fAdopt"></div>
+        <div class="sd-field"><label>동물등록번호</label><input type="text" inputmode="numeric" id="fReg" maxlength="20" placeholder="15자리 숫자"></div>
         <div class="sd-field"><label>가슴통 (cm)</label><input type="number" step="0.1" id="fLength" placeholder="예: 55"></div>
       </div>
       <div class="sd-row">
@@ -552,7 +568,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
   };
 
   const DEFAULT_BIRTH = '2022-06'; // 추정 생년월
-  let profile = { name: '샌즈', breed: '비글', birth: '', adopt: '', weight: '', length: '', note: '' };
+  let profile = { name: '샌즈', breed: '비글', birth: '', adopt: '', regNo: '', certs: [], weight: '', length: '', note: '' };
   let records = [];
   let activeTab = 'all';
 
@@ -731,6 +747,24 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     return d.toISOString().slice(0, 10);
   }
 
+  function renderCerts() {
+    const list = profile.certs || [];
+    $('sdCertCount').textContent = list.length ? `(${list.length})` : '';
+    $('sdCertGrid').innerHTML = list.length
+      ? list.map(c => `<div class="sd-cert">
+          <a href="${photoUrl(c.path)}" target="_blank" rel="noopener"><img src="${photoUrl(c.path)}" alt="접종 증명서" loading="lazy"></a>
+          <div class="sd-cert-label">${escapeHtml(c.label || '증명서')}<br><span>${escapeHtml(c.date || '')}</span></div>
+          <button class="sd-cert-del" data-id="${c.id}">삭제</button>
+        </div>`).join('')
+      : '<div class="sd-cert-empty">아직 올린 증명서가 없어요.</div>';
+    $('sdCertGrid').querySelectorAll('.sd-cert-del').forEach(b => b.addEventListener('click', () => {
+      if (!confirm('이 증명서를 삭제할까요?')) return;
+      profile.certs = (profile.certs || []).filter(c => c.id !== b.dataset.id);
+      saveProfile();
+      renderCerts();
+    }));
+  }
+
   function adoptString(d) {
     if (!d) return '';
     const p = d.split('-').map(Number);
@@ -840,6 +874,8 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('sdName').textContent = profile.name || '샌즈';
     $('sdBreed').textContent = `${profile.breed || '비글'} · ${ageString(profile.birth || DEFAULT_BIRTH)}`;
     $('sdAdopt').textContent = adoptString(profile.adopt);
+    $('sdReg').textContent = profile.regNo ? `🔖 동물등록번호 ${profile.regNo}` : '';
+    renderCerts();
     $('sdWeight').textContent = profile.weight ? `${profile.weight} kg` : '- kg';
     $('sdLength').textContent = profile.length ? `${profile.length} cm` : '- cm';
     $('sdNote').textContent = profile.note ? profile.note : '건강 상태 메모가 아직 없어요.';
@@ -853,6 +889,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('fBreed').value = profile.breed || '';
     $('fBirth').value = (profile.birth || DEFAULT_BIRTH).slice(0, 7);
     $('fAdopt').value = profile.adopt || '';
+    $('fReg').value = profile.regNo || '';
     $('fWeight').value = profile.weight || '';
     $('fLength').value = profile.length || '';
     $('fNote').value = profile.note || '';
@@ -1039,6 +1076,8 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       breed: $('fBreed').value.trim() || '비글',
       birth: $('fBirth').value,
       adopt: $('fAdopt').value,
+      regNo: $('fReg').value.replace(/\D/g, ''),
+      certs: profile.certs || [],
       weight: $('fWeight').value,
       length: $('fLength').value,
       note: $('fNote').value.trim(),
@@ -1101,6 +1140,30 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('aStatus').value = '';
     $('aPhoto').value = '';
     $('sdPhotoLbl').textContent = '📷 사진';
+  });
+
+  $('sdCertInput').addEventListener('change', async () => {
+    const f = $('sdCertInput').files[0];
+    $('sdCertInput').value = '';
+    if (!f) return;
+    if (!CLOUD_ENABLED || !navigator.onLine) { alert('인터넷이 연결돼 있어야 증명서를 올릴 수 있어요.'); return; }
+    const label = prompt('증명서 이름 (예: 종합백신 2차, 광견병) — 비워도 돼요', '');
+    if (label === null) return;
+    try {
+      toast('올리는 중...');
+      const dataUrl = await resizeImageToDataUrl(f, 1600);
+      const path = `cert/${crypto.randomUUID()}.jpg`;
+      await uploadPhoto(path, dataUrl);
+      const t = new Date();
+      const d = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+      profile.certs = (profile.certs || []).concat([{ id: crypto.randomUUID(), path, label: label.trim(), date: d }]);
+      saveProfile();
+      renderCerts();
+      toast('증명서를 올렸어요');
+    } catch (e) {
+      console.error('증명서 업로드 실패', e);
+      alert('증명서를 올리지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
   });
 
   try { $('aAuthor').value = localStorage.getItem('sands_author') || ''; } catch (e) { /* ignore */ }
