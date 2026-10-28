@@ -295,6 +295,9 @@ html, body {
   cursor: pointer; font-size: 11px; margin-top: 4px; margin-right: 10px; padding: 0;
   text-decoration: underline;
 }
+.sd-authorrow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+.sd-authorrow select { flex: 1; }
+.sd-entry-author { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
 .sd-editbanner { margin-top: 8px; font-size: 12.5px; font-weight: 700; color: #B58C1E; }
 .sd-editbanner a { margin-left: 6px; text-decoration: underline; cursor: pointer; }
 
@@ -480,6 +483,13 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
   <div class="sd-tabs" id="sdTabs"></div>
 
   <div class="sd-addbar">
+    <div class="sd-authorrow">✍️ 작성자
+      <select id="aAuthor">
+        <option value="">선택해주세요</option>
+        <option value="멋쟁이병훈공듀">멋쟁이병훈공듀</option>
+        <option value="이쁘니가은공듀">이쁘니가은공듀</option>
+      </select>
+    </div>
     <div class="sd-addbar-row">
       <select id="aType">
         <option value="walk">🐾 산책</option>
@@ -601,7 +611,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       fetch(`${REST}/profile?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=data`, {
         headers: sbHeaders(),
       }),
-      fetch(`${REST}/records?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=id,type,date,memo,weight,photo,status&order=date.desc`, {
+      fetch(`${REST}/records?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=id,type,date,memo,weight,photo,status,author&order=date.desc`, {
         headers: sbHeaders(),
       }),
     ]);
@@ -620,6 +630,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     if (r.weight !== undefined && r.weight !== null && r.weight !== '') out.weight = String(r.weight);
     if (r.photo) out.photo = r.photo;
     if (r.status) out.status = r.status;
+    if (r.author) out.author = r.author;
     return out;
   }
 
@@ -642,6 +653,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       weight: entry.weight != null ? String(entry.weight) : '',
       photo: entry.photo || null,
       status: entry.status || null,
+      author: entry.author || null,
     };
     const res = await fetch(`${REST}/records?on_conflict=id`, {
       method: 'POST',
@@ -953,6 +965,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
               <div class="sd-entry-type" style="color:${meta.color}">${meta.label}</div>
               <div class="sd-entry-date">${r.date}</div>
             </div>
+            ${r.author ? `<div class="sd-entry-author">✍️ ${escapeHtml(r.author)}</div>` : ''}
             ${memo ? `<div class="sd-entry-memo">${escapeHtml(memo)}</div>` : ''}
             ${r.photo ? `<a href="${photoUrl(r.photo)}" target="_blank" rel="noopener"><img class="sd-entry-photo" src="${photoUrl(r.photo)}" alt="기록 사진" loading="lazy"></a>` : ''}
             <button class="sd-entry-edit" data-id="${r.id}">수정</button><button class="sd-entry-del" data-id="${r.id}">삭제</button>
@@ -1076,6 +1089,11 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('sdPhotoLbl').textContent = '📷 사진';
   });
 
+  try { $('aAuthor').value = localStorage.getItem('sands_author') || ''; } catch (e) { /* ignore */ }
+  $('aAuthor').addEventListener('change', () => {
+    try { localStorage.setItem('sands_author', $('aAuthor').value); } catch (e) { /* ignore */ }
+  });
+
   // Add record type toggle for weight field
   $('aType').addEventListener('change', () => {
     $('aWeightVal').style.display = $('aType').value === 'weight' ? 'block' : 'none';
@@ -1090,6 +1108,12 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
 
     if (type === 'weight' && !weightVal && !memo) {
       alert('몸무게 값을 입력해주세요.');
+      return;
+    }
+
+    const author = $('aAuthor').value;
+    if (!author) {
+      alert('작성자를 먼저 선택해주세요.');
       return;
     }
 
@@ -1112,6 +1136,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     const entry = { id: editing ? editing.id : Date.now(), type, date, memo };
     if (photoPath) entry.photo = photoPath;
     else if (editing && editing.photo) entry.photo = editing.photo;
+    entry.author = (editing && editing.author) ? editing.author : author;
     if (type === 'poop' && $('aStatus').value) entry.status = $('aStatus').value;
     if (type === 'weight' && weightVal) {
       entry.weight = weightVal;
