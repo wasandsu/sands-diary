@@ -291,6 +291,10 @@ html, body {
 }
 .sd-entry-del:hover { color: var(--stamp); }
 
+.sd-next { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+.sd-next.is-due { color: var(--stamp); }
+.sd-chart { margin: 14px 0 4px; }
+.sd-chart svg { width: 100%; height: auto; display: block; }
 /* ---------- Sync status badge ---------- */
 .sd-sync {
   display: flex;
@@ -422,6 +426,7 @@ html, body {
       <div class="sd-stat"><div class="sd-stat-label">최근 산책</div><div class="sd-stat-value" id="sdLastWalk">-</div></div>
     </div>
     <div class="sd-note" id="sdNote">건강 상태 메모가 아직 없어요.</div>
+    <div class="sd-next" id="sdNext"></div>
 
     <div class="sd-installbar" id="sdInstallBar">
       <span>홈 화면에 추가하면 앱처럼 쓸 수 있어요</span>
@@ -453,6 +458,7 @@ html, body {
         <div class="sd-field"><label>&nbsp;</label></div>
       </div>
       <div class="sd-field"><label>건강 상태 메모</label><textarea id="fNote" placeholder="알레르기, 지병, 특이사항 등을 적어주세요"></textarea></div>
+      <div class="sd-field"><label>구충제 주기 (일)</label><input type="number" min="1" id="fDeworm" placeholder="30"></div>
       <div class="sd-formbtns">
         <button class="sd-btn sd-btn-ghost" id="sdRemovePhoto" style="margin-right:auto;">사진 삭제</button>
         <button class="sd-btn sd-btn-ghost" id="sdCancelEdit">취소</button>
@@ -461,6 +467,7 @@ html, body {
     </div>
   </div>
 
+  <div class="sd-chart" id="sdChart"></div>
   <div class="sd-tabs" id="sdTabs"></div>
 
   <div class="sd-addbar">
@@ -626,7 +633,14 @@ html, body {
     if (!res.ok) throw new Error('record delete ' + res.status);
   }
 
-  // 클라우드에서 최신 데이터를 당겨와 로컬과 병합(클라우드 우선)
+  // 업로드 못 한 기록 id를 기억해 두었다가, 당겨올 때 지우지 않고 다시 올립니다.
+  const STORAGE_PENDING = 'sands_pending';
+  function getPending() { try { return JSON.parse(localStorage.getItem(STORAGE_PENDING) || '[]'); } catch (e) { return []; } }
+  function setPending(a) { try { localStorage.setItem(STORAGE_PENDING, JSON.stringify(a)); } catch (e) { /* ignore */ } }
+  function markPending(id) { const a = getPending(); if (!a.includes(id)) { a.push(id); setPending(a); } }
+  function clearPending(id) { setPending(getPending().filter(x => x !== id)); }
+
+  // 클라우드에서 최신 데이터를 당겨와 로컬과 병합(클라우드 우선, 미업로드 기록은 보존)
   async function pullFromCloud(opts) {
     opts = opts || {};
     if (!CLOUD_ENABLED) { setSyncStatus('', '기기에만 저장 중'); return; }
@@ -638,8 +652,14 @@ html, body {
         profile = { ...profile, ...cloud.profile };
         saveProfileLocal();
       }
-      records = cloud.records;
+      const pend = getPending();
+      const extra = records.filter(r => pend.includes(r.id) && !cloud.records.some(c => c.id === r.id));
+      records = cloud.records.concat(extra);
       saveRecordsLocal();
+      pend.forEach(id => { if (cloud.records.some(c => c.id === id)) clearPending(id); });
+      for (const r of extra) {
+        try { await cloudUpsertRecord(r); clearPending(r.id); } catch (e) { console.error('재업로드 실패', e); }
+      }
       renderProfile();
       renderTabs();
       renderTimeline();
@@ -772,6 +792,8 @@ html, body {
     $('fWeight').value = profile.weight || '';
     $('fLength').value = profile.length || '';
     $('fNote').value = profile.note || '';
+    $('fDeworm').value = profile.dewormDays || '';
+    renderNext();
   }
 
   function renderTabs() {
@@ -794,7 +816,56 @@ html, body {
     return div.innerHTML;
   }
 
+  function renderNext() {
+    const el = $('sdNext');
+    if (!el) return;
+    const days = Number(profile.dewormDays) || 30;
+    const last = records.filter(r => r.type === 'deworm').sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!last) { el.textContent = '💊 구충제 기록을 추가하면 다음 일정을 알려드려요'; el.className = 'sd-next'; return; }
+    const p = last.date.split('-').map(Number);
+    const due = new Date(p[0], p[1] - 1, p[2] + days);
+    const t = new Date();
+    const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    const diff = Math.round((due - today) / 86400000);
+    const md = `${due.getMonth() + 1}/${due.getDate()}`;
+    el.textContent = diff > 0 ? `💊 다음 구충제 D-${diff} (${md})`
+      : diff === 0 ? `💊 오늘 구충제 먹는 날이에요 (${md})`
+      : `💊 구충제 ${-diff}일 지났어요 (${md} 예정)`;
+    el.className = 'sd-next' + (diff <= 3 ? ' is-due' : '');
+  }
+
+  function renderChart() {
+    const el = $('sdChart');
+    if (!el) return;
+    const pts = records
+      .filter(r => r.type === 'weight' && Number(r.weight) > 0)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-12);
+    if (pts.length < 2) { el.innerHTML = ''; return; }
+    const W = 320, H = 130, L = 30, R = 12, T = 18, B = 26;
+    const vals = pts.map(r => Number(r.weight));
+    let min = Math.min(...vals), max = Math.max(...vals);
+    if (max - min < 0.5) { min -= 0.25; max += 0.25; }
+    const x = i => L + i * (W - L - R) / (pts.length - 1);
+    const y = v => T + (max - v) * (H - T - B) / (max - min);
+    const line = pts.map((r, i) => `${x(i).toFixed(1)},${y(vals[i]).toFixed(1)}`).join(' ');
+    const dots = pts.map((r, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="3.5" fill="#6B4226"/>`).join('');
+    const lastI = pts.length - 1;
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="몸무게 변화 그래프" font-size="10" fill="#7A6A58">
+      <text x="${L - 4}" y="${T + 3}" text-anchor="end">${max.toFixed(1)}</text>
+      <text x="${L - 4}" y="${H - B + 3}" text-anchor="end">${min.toFixed(1)}</text>
+      <line x1="${L}" y1="${T}" x2="${W - R}" y2="${T}" stroke="#E4D6BC"/>
+      <line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="#E4D6BC"/>
+      <polyline points="${line}" fill="none" stroke="#6B4226" stroke-width="2" stroke-linejoin="round"/>${dots}
+      <text x="${x(lastI).toFixed(1)}" y="${(y(vals[lastI]) - 8).toFixed(1)}" text-anchor="end" font-weight="700" fill="#6B4226">${vals[lastI]}kg</text>
+      <text x="${L}" y="${H - 8}">${pts[0].date.slice(5)}</text>
+      <text x="${W - R}" y="${H - 8}" text-anchor="end">${pts[lastI].date.slice(5)}</text>
+    </svg>`;
+  }
+
   function renderTimeline() {
+    renderChart();
+    renderNext();
     const list = records
       .filter(r => activeTab === 'all' || r.type === activeTab)
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
@@ -872,6 +943,7 @@ html, body {
       weight: $('fWeight').value,
       length: $('fLength').value,
       note: $('fNote').value.trim(),
+      dewormDays: $('fDeworm').value,
     };
     saveProfile();
     renderProfile();
@@ -929,6 +1001,7 @@ html, body {
       saveProfile();
     }
     records.push(entry);
+    markPending(entry.id);
     saveRecords();
 
     $('aMemo').value = '';
@@ -940,7 +1013,7 @@ html, body {
     if (CLOUD_ENABLED && navigator.onLine) {
       setSyncStatus('is-syncing', '동기화 중…');
       cloudUpsertRecord(entry)
-        .then(() => setSyncStatus('is-synced', '가족과 동기화됨 🐾'))
+        .then(() => { clearPending(entry.id); setSyncStatus('is-synced', '가족과 동기화됨 🐾'); })
         .catch((e) => { console.error(e); setSyncStatus('is-offline', '동기화 실패 · 이 기기에 저장됨'); });
     }
     toast('기록했어요 🐾');
