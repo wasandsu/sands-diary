@@ -290,6 +290,13 @@ html, body {
   text-decoration: underline;
 }
 .sd-entry-del:hover { color: var(--stamp); }
+.sd-entry-edit {
+  background: none; border: none; color: var(--ink-soft);
+  cursor: pointer; font-size: 11px; margin-top: 4px; margin-right: 10px; padding: 0;
+  text-decoration: underline;
+}
+.sd-editbanner { margin-top: 8px; font-size: 12.5px; font-weight: 700; color: #B58C1E; }
+.sd-editbanner a { margin-left: 6px; text-decoration: underline; cursor: pointer; }
 
 .sd-next { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
 .sd-next.is-due { color: var(--stamp); }
@@ -498,6 +505,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       </select>
       <button class="sd-btn sd-btn-primary" id="sdAddBtn">기록 추가</button>
     </div>
+    <div class="sd-editbanner" id="sdEditBanner" style="display:none;">✏️ 기록 수정 중 <a id="sdCancelEdit">취소</a></div>
   </div>
 
   <div class="sd-timeline" id="sdTimeline">
@@ -684,10 +692,10 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
         saveProfileLocal();
       }
       const pend = getPending();
-      const extra = records.filter(r => pend.includes(r.id) && !cloud.records.some(c => c.id === r.id));
-      records = cloud.records.concat(extra);
+      const extra = records.filter(r => pend.includes(r.id));
+      records = cloud.records.filter(c => !extra.some(e => e.id === c.id)).concat(extra);
       saveRecordsLocal();
-      pend.forEach(id => { if (cloud.records.some(c => c.id === id)) clearPending(id); });
+      pend.forEach(id => { if (!extra.some(e => e.id === id)) clearPending(id); });
       for (const r of extra) {
         try { await cloudUpsertRecord(r); clearPending(r.id); } catch (e) { console.error('재업로드 실패', e); }
       }
@@ -828,6 +836,31 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     renderAvatar();
   }
 
+  let editingId = null;
+
+  function exitEdit() {
+    editingId = null;
+    $('sdEditBanner').style.display = 'none';
+    $('sdAddBtn').textContent = '기록 추가';
+  }
+
+  function startEdit(id) {
+    const r = records.find(x => x.id === id);
+    if (!r) return;
+    editingId = id;
+    $('aType').value = r.type;
+    $('aType').dispatchEvent(new Event('change'));
+    $('aDate').value = r.date;
+    $('aMemo').value = r.memo || '';
+    $('aWeightVal').value = r.weight || '';
+    $('aStatus').value = r.status || '';
+    $('aPhoto').value = '';
+    $('sdPhotoLbl').textContent = r.photo ? '📷 기존 사진' : '📷 사진';
+    $('sdAddBtn').textContent = '수정 저장';
+    $('sdEditBanner').style.display = 'block';
+    $('aMemo').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   function renderTabs() {
     const tabs = [{ key: 'all', label: '전체' }, ...Object.keys(TYPE_META).map(k => ({ key: k, label: TYPE_META[k].icon + ' ' + TYPE_META[k].label }))];
     $('sdTabs').innerHTML = tabs.map(t =>
@@ -922,14 +955,19 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
             </div>
             ${memo ? `<div class="sd-entry-memo">${escapeHtml(memo)}</div>` : ''}
             ${r.photo ? `<a href="${photoUrl(r.photo)}" target="_blank" rel="noopener"><img class="sd-entry-photo" src="${photoUrl(r.photo)}" alt="기록 사진" loading="lazy"></a>` : ''}
-            <button class="sd-entry-del" data-id="${r.id}">삭제</button>
+            <button class="sd-entry-edit" data-id="${r.id}">수정</button><button class="sd-entry-del" data-id="${r.id}">삭제</button>
           </div>
         </div>`;
     }).join('');
 
+    $('sdTimeline').querySelectorAll('.sd-entry-edit').forEach(btn => {
+      btn.addEventListener('click', () => startEdit(Number(btn.dataset.id)));
+    });
+
     $('sdTimeline').querySelectorAll('.sd-entry-del').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = Number(btn.dataset.id);
+        if (editingId === id) exitEdit();
         const removed = records.find(r => r.id === id);
         if (!removed) return;
         const removedIndex = records.indexOf(removed);
@@ -1029,6 +1067,15 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('sdPhotoLbl').textContent = $('aPhoto').files.length ? '📷 ✓' : '📷 사진';
   });
 
+  $('sdCancelEdit').addEventListener('click', () => {
+    exitEdit();
+    $('aMemo').value = '';
+    $('aWeightVal').value = '';
+    $('aStatus').value = '';
+    $('aPhoto').value = '';
+    $('sdPhotoLbl').textContent = '📷 사진';
+  });
+
   // Add record type toggle for weight field
   $('aType').addEventListener('change', () => {
     $('aWeightVal').style.display = $('aType').value === 'weight' ? 'block' : 'none';
@@ -1061,15 +1108,17 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
       }
     }
 
-    const entry = { id: Date.now(), type, date, memo };
+    const editing = editingId != null ? records.find(r => r.id === editingId) : null;
+    const entry = { id: editing ? editing.id : Date.now(), type, date, memo };
     if (photoPath) entry.photo = photoPath;
+    else if (editing && editing.photo) entry.photo = editing.photo;
     if (type === 'poop' && $('aStatus').value) entry.status = $('aStatus').value;
     if (type === 'weight' && weightVal) {
       entry.weight = weightVal;
       profile.weight = weightVal;
       saveProfile();
     }
-    records.push(entry);
+    if (editing) { records[records.indexOf(editing)] = entry; } else { records.push(entry); }
     markPending(entry.id);
     saveRecords();
 
@@ -1078,6 +1127,7 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
     $('aPhoto').value = '';
     $('aStatus').value = '';
     $('sdPhotoLbl').textContent = '📷 사진';
+    exitEdit();
     renderProfile();
     renderTimeline();
 
