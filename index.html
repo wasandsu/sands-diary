@@ -291,6 +291,91 @@ html, body {
 }
 .sd-entry-del:hover { color: var(--stamp); }
 
+/* ---------- Sync status badge ---------- */
+.sd-sync {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  cursor: default;
+  user-select: none;
+}
+.sd-sync-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  flex-shrink: 0;
+}
+.sd-sync.is-synced { color: var(--green); border-color: #BFD1AF; }
+.sd-sync.is-synced .sd-sync-dot { background: var(--green); }
+.sd-sync.is-syncing { color: var(--tan); }
+.sd-sync.is-syncing .sd-sync-dot { background: var(--tan); animation: sd-pulse 1s ease-in-out infinite; }
+.sd-sync.is-offline { color: var(--stamp); border-color: var(--stamp-soft); }
+.sd-sync.is-offline .sd-sync-dot { background: var(--stamp); }
+@keyframes sd-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ---------- Backup / data tools ---------- */
+.sd-datatools {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.sd-datatools .sd-btn { flex: 1; text-align: center; }
+
+/* ---------- Toast ---------- */
+.sd-toast-wrap {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  width: calc(100% - 40px);
+  max-width: 420px;
+}
+.sd-toast {
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 11px 16px;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(43,36,28,0.3);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: sd-toast-in 0.2s ease;
+  pointer-events: auto;
+  max-width: 100%;
+}
+.sd-toast.is-out { animation: sd-toast-out 0.2s ease forwards; }
+.sd-toast-msg { flex: 1; min-width: 0; }
+.sd-toast-action {
+  background: none;
+  border: none;
+  color: var(--tan);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 0;
+  font-family: inherit;
+}
+@keyframes sd-toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sd-toast-out { to { opacity: 0; transform: translateY(10px); } }
+
 .sd-footer {
   text-align: center;
   font-size: 10.5px;
@@ -308,7 +393,7 @@ html, body {
 <body>
 <div class="sd-app" id="sdApp">
   <div class="sd-header">
-    <div class="sd-eyebrow">🐾 샌즈 건강 수첩</div>
+    <div class="sd-eyebrow">🐾 반려견 건강 수첩</div>
     <div class="sd-titlebar">
       <button class="sd-avatar" id="sdAvatarBtn" type="button" aria-label="프로필 사진 변경" title="눌러서 사진 바꾸기">
         <svg id="sdAvatarSvg" width="34" height="34" viewBox="0 0 64 64" fill="none">
@@ -341,6 +426,17 @@ html, body {
     <div class="sd-installbar" id="sdInstallBar">
       <span>홈 화면에 추가하면 앱처럼 쓸 수 있어요</span>
       <button id="sdInstallBtn">추가</button>
+    </div>
+
+    <div class="sd-sync" id="sdSync" title="가족과 공유되는 동기화 상태예요">
+      <span class="sd-sync-dot"></span>
+      <span id="sdSyncText">동기화 상태 확인 중…</span>
+    </div>
+
+    <div class="sd-datatools">
+      <button class="sd-btn sd-btn-ghost" id="sdExportBtn" type="button">⬇ 백업 내보내기</button>
+      <button class="sd-btn sd-btn-ghost" id="sdImportBtn" type="button">⬆ 백업 가져오기</button>
+      <input type="file" id="sdImportInput" accept="application/json,.json" style="display:none;">
     </div>
 
     <div class="sd-editform" id="sdEditForm">
@@ -387,11 +483,22 @@ html, body {
   <div class="sd-timeline" id="sdTimeline">
     <div class="sd-empty">불러오는 중...</div>
   </div>
-  <div class="sd-footer">샌즈의 건강 수첩 · 이 기기에만 저장되는 개인 기록이에요</div>
+  <div class="sd-footer">샌즈의 건강 수첩 · 가족과 함께 기록하고 이 기기에도 저장돼요</div>
 </div>
+
+<div class="sd-toast-wrap" id="sdToastWrap"></div>
 
 <script>
 (function() {
+  // ======== Supabase 가족 공유 설정 ========
+  // publishable 키는 공개돼도 안전한 키라 여기에 넣어도 됩니다.
+  // 가족(아내분)과 같은 FAMILY_CODE로 접속하면 같은 기록을 공유해요.
+  const SUPABASE_URL = 'https://raanvzdmhrhyxewciijn.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_u8iFaLpMYmYU3c6ZKVSz8Q_sluGgM_m';
+  const FAMILY_CODE  = 'sands-0113';
+  const CLOUD_ENABLED = !!(SUPABASE_URL && SUPABASE_KEY && FAMILY_CODE);
+  const REST = SUPABASE_URL + '/rest/v1';
+
   const STORAGE_PROFILE = 'sands_profile';
   const STORAGE_RECORDS = 'sands_records';
   const STORAGE_PHOTO = 'sands_photo';
@@ -408,6 +515,142 @@ html, body {
   let activeTab = 'all';
 
   const $ = (id) => document.getElementById(id);
+
+  // ======== Toast ========
+  function toast(msg, opts) {
+    opts = opts || {};
+    const wrap = $('sdToastWrap');
+    if (!wrap) return;
+    const el = document.createElement('div');
+    el.className = 'sd-toast';
+    const span = document.createElement('span');
+    span.className = 'sd-toast-msg';
+    span.textContent = msg;
+    el.appendChild(span);
+    if (opts.actionLabel && typeof opts.onAction === 'function') {
+      const btn = document.createElement('button');
+      btn.className = 'sd-toast-action';
+      btn.textContent = opts.actionLabel;
+      btn.addEventListener('click', () => {
+        try { opts.onAction(); } finally { remove(); }
+      });
+      el.appendChild(btn);
+    }
+    wrap.appendChild(el);
+    let removed = false;
+    function remove() {
+      if (removed) return;
+      removed = true;
+      el.classList.add('is-out');
+      setTimeout(() => el.remove(), 220);
+    }
+    setTimeout(remove, opts.duration || 3200);
+    return remove;
+  }
+
+  // ======== Sync status badge ========
+  function setSyncStatus(state, text) {
+    const el = $('sdSync');
+    if (!el) return;
+    el.classList.remove('is-synced', 'is-syncing', 'is-offline');
+    if (state) el.classList.add(state);
+    $('sdSyncText').textContent = text;
+  }
+
+  // ======== Supabase REST helpers ========
+  // 새 publishable 키는 apikey 헤더로만 보냅니다 (Authorization Bearer 불필요).
+  function sbHeaders(extra) {
+    return Object.assign({
+      'apikey': SUPABASE_KEY,
+      'Content-Type': 'application/json',
+    }, extra || {});
+  }
+
+  async function cloudFetchAll() {
+    // 프로필과 기록을 family_code로 가져옵니다.
+    const [profRes, recRes] = await Promise.all([
+      fetch(`${REST}/profile?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=data`, {
+        headers: sbHeaders(),
+      }),
+      fetch(`${REST}/records?family_code=eq.${encodeURIComponent(FAMILY_CODE)}&select=id,type,date,memo,weight&order=date.desc`, {
+        headers: sbHeaders(),
+      }),
+    ]);
+    if (!profRes.ok) throw new Error('profile fetch ' + profRes.status);
+    if (!recRes.ok) throw new Error('records fetch ' + recRes.status);
+    const profRows = await profRes.json();
+    const recRows = await recRes.json();
+    return {
+      profile: (profRows[0] && profRows[0].data) ? profRows[0].data : null,
+      records: Array.isArray(recRows) ? recRows.map(normalizeRecord) : [],
+    };
+  }
+
+  function normalizeRecord(r) {
+    const out = { id: Number(r.id), type: r.type, date: r.date, memo: r.memo || '' };
+    if (r.weight !== undefined && r.weight !== null && r.weight !== '') out.weight = String(r.weight);
+    return out;
+  }
+
+  async function cloudUpsertProfile(p) {
+    const res = await fetch(`${REST}/profile?on_conflict=family_code`, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({ family_code: FAMILY_CODE, data: p, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error('profile upsert ' + res.status);
+  }
+
+  async function cloudUpsertRecord(entry) {
+    const row = {
+      id: entry.id,
+      family_code: FAMILY_CODE,
+      type: entry.type,
+      date: entry.date,
+      memo: entry.memo || '',
+      weight: entry.weight != null ? String(entry.weight) : '',
+    };
+    const res = await fetch(`${REST}/records?on_conflict=id`, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify(row),
+    });
+    if (!res.ok) throw new Error('record upsert ' + res.status);
+  }
+
+  async function cloudDeleteRecord(id) {
+    const res = await fetch(`${REST}/records?id=eq.${encodeURIComponent(id)}&family_code=eq.${encodeURIComponent(FAMILY_CODE)}`, {
+      method: 'DELETE',
+      headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+    });
+    if (!res.ok) throw new Error('record delete ' + res.status);
+  }
+
+  // 클라우드에서 최신 데이터를 당겨와 로컬과 병합(클라우드 우선)
+  async function pullFromCloud(opts) {
+    opts = opts || {};
+    if (!CLOUD_ENABLED) { setSyncStatus('', '기기에만 저장 중'); return; }
+    if (!navigator.onLine) { setSyncStatus('is-offline', '오프라인 · 이 기기에 저장됨'); return; }
+    setSyncStatus('is-syncing', '동기화 중…');
+    try {
+      const cloud = await cloudFetchAll();
+      if (cloud.profile) {
+        profile = { ...profile, ...cloud.profile };
+        saveProfileLocal();
+      }
+      records = cloud.records;
+      saveRecordsLocal();
+      renderProfile();
+      renderTabs();
+      renderTimeline();
+      setSyncStatus('is-synced', '가족과 동기화됨 🐾');
+      if (opts.notify) toast('최신 기록을 불러왔어요');
+    } catch (e) {
+      console.error('클라우드 동기화 실패', e);
+      setSyncStatus('is-offline', '동기화 실패 · 이 기기에 저장됨');
+      if (opts.notify) toast('동기화에 실패했어요. 잠시 후 다시 시도해요.');
+    }
+  }
 
   function todayStr() {
     const d = new Date();
@@ -439,6 +682,8 @@ html, body {
     renderTabs();
     renderTimeline();
     renderAvatar();
+    // 로컬을 먼저 그린 뒤 클라우드에서 최신 데이터를 당겨옵니다 (local-first)
+    pullFromCloud();
   }
 
   function renderAvatar() {
@@ -482,16 +727,31 @@ html, body {
     });
   }
 
-  function saveProfile() {
+  function saveProfileLocal() {
     try {
       localStorage.setItem(STORAGE_PROFILE, JSON.stringify(profile));
     } catch (e) { console.error('프로필 저장 실패', e); alert('저장에 실패했어요. 저장 공간이 부족할 수 있어요.'); }
   }
 
-  function saveRecords() {
+  function saveRecordsLocal() {
     try {
       localStorage.setItem(STORAGE_RECORDS, JSON.stringify(records));
     } catch (e) { console.error('기록 저장 실패', e); alert('저장에 실패했어요. 저장 공간이 부족할 수 있어요.'); }
+  }
+
+  // 로컬에 즉시 저장하고, 클라우드에도 반영 (실패해도 로컬은 유지)
+  function saveProfile() {
+    saveProfileLocal();
+    if (CLOUD_ENABLED && navigator.onLine) {
+      setSyncStatus('is-syncing', '동기화 중…');
+      cloudUpsertProfile(profile)
+        .then(() => setSyncStatus('is-synced', '가족과 동기화됨 🐾'))
+        .catch((e) => { console.error(e); setSyncStatus('is-offline', '동기화 실패 · 이 기기에 저장됨'); });
+    }
+  }
+
+  function saveRecords() {
+    saveRecordsLocal();
   }
 
   function renderProfile() {
@@ -565,10 +825,33 @@ html, body {
     $('sdTimeline').querySelectorAll('.sd-entry-del').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = Number(btn.dataset.id);
+        const removed = records.find(r => r.id === id);
+        if (!removed) return;
+        const removedIndex = records.indexOf(removed);
         records = records.filter(r => r.id !== id);
         saveRecords();
         renderProfile();
         renderTimeline();
+        if (CLOUD_ENABLED && navigator.onLine) {
+          cloudDeleteRecord(id).catch((e) => {
+            console.error('클라우드 삭제 실패', e);
+            setSyncStatus('is-offline', '삭제 동기화 실패 · 이 기기엔 반영됨');
+          });
+        }
+        // 실행 취소(undo) 토스트
+        toast('기록을 삭제했어요', {
+          actionLabel: '되돌리기',
+          duration: 5000,
+          onAction: () => {
+            records.splice(Math.min(removedIndex, records.length), 0, removed);
+            saveRecords();
+            renderProfile();
+            renderTimeline();
+            if (CLOUD_ENABLED && navigator.onLine) {
+              cloudUpsertRecord(removed).catch((e) => console.error('복구 동기화 실패', e));
+            }
+          },
+        });
       });
     });
   }
@@ -593,6 +876,7 @@ html, body {
     saveProfile();
     renderProfile();
     $('sdEditForm').classList.remove('open');
+    toast('프로필을 저장했어요');
   });
 
   // ---- Avatar photo ----
@@ -651,7 +935,110 @@ html, body {
     $('aWeightVal').value = '';
     renderProfile();
     renderTimeline();
+
+    // 클라우드에 반영
+    if (CLOUD_ENABLED && navigator.onLine) {
+      setSyncStatus('is-syncing', '동기화 중…');
+      cloudUpsertRecord(entry)
+        .then(() => setSyncStatus('is-synced', '가족과 동기화됨 🐾'))
+        .catch((e) => { console.error(e); setSyncStatus('is-offline', '동기화 실패 · 이 기기에 저장됨'); });
+    }
+    toast('기록했어요 🐾');
   });
+
+  // ---- 백업 내보내기 / 가져오기 ----
+  function exportBackup() {
+    let photo = null;
+    try { photo = localStorage.getItem(STORAGE_PHOTO); } catch (e) { /* ignore */ }
+    const backup = {
+      app: 'sands-health-notebook',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      profile,
+      records,
+      photo: photo || null,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `샌즈수첩_백업_${todayStr()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('백업 파일을 저장했어요');
+  }
+
+  async function importBackup(file) {
+    let data;
+    try {
+      const text = await file.text();
+      data = JSON.parse(text);
+    } catch (e) {
+      alert('백업 파일을 읽지 못했어요. 올바른 JSON 파일인지 확인해주세요.');
+      return;
+    }
+    if (!data || (!Array.isArray(data.records) && !data.profile)) {
+      alert('샌즈 수첩 백업 파일이 아닌 것 같아요.');
+      return;
+    }
+    if (!confirm('지금 기록을 이 백업 내용으로 덮어쓸까요?\n(현재 기기의 기록이 백업 내용으로 바뀝니다)')) return;
+
+    if (data.profile && typeof data.profile === 'object') {
+      profile = { ...profile, ...data.profile };
+      saveProfileLocal();
+    }
+    if (Array.isArray(data.records)) {
+      records = data.records.map(normalizeRecord);
+      saveRecordsLocal();
+    }
+    if (data.photo) {
+      try { localStorage.setItem(STORAGE_PHOTO, data.photo); } catch (e) { console.error('사진 복원 실패', e); }
+    }
+    renderProfile();
+    renderTabs();
+    renderTimeline();
+    renderAvatar();
+    toast('백업을 불러왔어요');
+
+    // 복원한 내용을 클라우드에도 올려 가족과 공유
+    if (CLOUD_ENABLED && navigator.onLine) {
+      setSyncStatus('is-syncing', '동기화 중…');
+      try {
+        await cloudUpsertProfile(profile);
+        for (const r of records) { await cloudUpsertRecord(r); }
+        setSyncStatus('is-synced', '가족과 동기화됨 🐾');
+        toast('복원한 기록을 가족과 공유했어요');
+      } catch (e) {
+        console.error('복원 후 동기화 실패', e);
+        setSyncStatus('is-offline', '동기화 실패 · 이 기기엔 반영됨');
+      }
+    }
+  }
+
+  $('sdExportBtn').addEventListener('click', exportBackup);
+  $('sdImportBtn').addEventListener('click', () => $('sdImportInput').click());
+  $('sdImportInput').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (file) importBackup(file);
+  });
+
+  // ---- 연결 상태 변화 대응 ----
+  window.addEventListener('online', () => {
+    toast('다시 연결됐어요. 동기화할게요.');
+    pullFromCloud();
+  });
+  window.addEventListener('offline', () => {
+    setSyncStatus('is-offline', '오프라인 · 이 기기에 저장됨');
+  });
+  // 앱으로 돌아왔을 때 최신 기록 당겨오기 (가족이 추가한 기록 반영)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pullFromCloud();
+  });
+  // 동기화 뱃지를 누르면 수동 새로고침
+  $('sdSync').addEventListener('click', () => pullFromCloud({ notify: true }));
 
   $('aDate').value = todayStr();
   loadData();
