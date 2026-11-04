@@ -309,6 +309,7 @@ html, body {
 .sd-cert-empty { grid-column: 1 / -1; color: var(--ink-soft); font-size: 12px; }
 #sdLogin { position: fixed; inset: 0; z-index: 9999; background: #FBF3E4; display: none; align-items: center; justify-content: center; padding: 24px; }
 .sd-login-box { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 10px; }
+.sd-login-logo { width: 112px; height: 112px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 2px; border: 3px solid #E4D6BC; }
 .sd-login-title { font-size: 22px; font-weight: 800; text-align: center; }
 .sd-login-sub { font-size: 13px; text-align: center; color: #7A6A58; margin-bottom: 6px; }
 .sd-login-box input { padding: 12px; font-size: 16px; border: 1px solid #E4D6BC; border-radius: 10px; background: #fff; }
@@ -427,7 +428,8 @@ label.sd-btn { display: inline-flex; align-items: center; justify-content: cente
 <body>
 <div id="sdLogin">
   <div class="sd-login-box">
-    <div class="sd-login-title">🐶 샌즈 수첩</div>
+    <img class="sd-login-logo" src="icons/icon-192.png" alt="샌즈" width="112" height="112">
+    <div class="sd-login-title">샌즈 수첩</div>
     <div class="sd-login-sub">가족만 쓸 수 있어요. 로그인해 주세요.</div>
     <input type="email" id="lgEmail" autocomplete="username" placeholder="이메일">
     <input type="password" id="lgPw" autocomplete="current-password" placeholder="비밀번호">
